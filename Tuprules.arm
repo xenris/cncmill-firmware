@@ -1,0 +1,9 @@
+# Tuprules.arm - 1
+
+compiler = arm-none-eabi
+
+CFLAGS += -mcpu=$(mmcu)
+CFLAGS += -mthumb
+CFLAGS += -nostdlib
+CFLAGS += -D__ARM__
+CFLAGS += -Tld/stm32.ld

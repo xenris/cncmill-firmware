@@ -1,0 +1,7 @@
+# .gitignore - 2
+
+/gen/
+/obj/
+/.tup/
+/Tupresources
+/.clang_complete

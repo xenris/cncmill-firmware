@@ -1,0 +1,6 @@
+# Tuprules.avr - 1
+
+compiler = avr
+
+CFLAGS += -mmcu=$(mmcu)
+CFLAGS += -D__AVR__

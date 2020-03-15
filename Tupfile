@@ -1,0 +1,21 @@
+# Tupfile - 1
+
+include_rules
+
+# Generate preprocessed files, for debugging.
+: foreach $(SRC_FILES) |> $(compiler)-cpp $(CFLAGS_%e) $(CFLAGS) %f > %o |> gen/%f {pp}
+
+# Compile preprocessed source.
+: foreach {pp} |> $(compiler)-gcc $(CFLAGS_%e) $(CFLAGS) -c %f -o %o |> obj/%f.o {objs}
+
+# Link objects.
+: {objs} |> $(compiler)-gcc $(CFLAGS) -o %o %f |> gen/firmware.elf {elf}
+
+# Copy to binary.
+: {elf} |> $(compiler)-objcopy -O binary %f %o |> gen/firmware.bin {bin}
+
+# Copy to hex.
+: {elf} |> $(compiler)-objcopy -O ihex %f %o |> gen/firmware.hex {hex}
+
+# Decompile elf to asm, for debugging.
+: {elf} |> $(compiler)-objdump --architecture=$(arch) -z --disassemble %f > %o |> gen/%B.asm
