@@ -97,8 +97,6 @@ void main() {
     while(true) {
         handleSerial();
         handleEStop();
-
-        block() {}
     }
 }
 
@@ -229,10 +227,12 @@ void respond(uint8_t id) {
 }
 
 void handleEStop() {
-    if(EStopPin::input() == Pin::Value::low) {
-        pauseXyzTimers();
-    } else {
-        resumeXyzTimers();
+    block() {
+        if(EStopPin::input() == Pin::Value::low) {
+            pauseXyzTimers();
+        } else {
+            resumeXyzTimers();
+        }
     }
 }
 
