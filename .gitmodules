@@ -1,3 +1,0 @@
-[submodule "lib/nblib"]
-	path = lib/nblib
-	url = https://github.com/xenris/nblib.git

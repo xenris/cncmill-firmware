@@ -1,0 +1,347 @@
+/// [[Index]]
+
+/// # {{Digital IO Pins}}
+
+/// N is the pin id (0, 1, 2, etc).
+
+/// ```c++
+/// nblib::hw::PortB::Pin5::mode(nblib::hw::Pin::Mode::output);
+///
+/// nblib::hw::PortB::Pin5::output(nblib::hw::Pin::Value::high);
+///
+/// while(true) {
+///     block {
+///         nblib::hw::PortB::Pin5::toggle();
+///     }
+/// }
+/// ```
+
+#include "hardware/chip.hpp"
+#include "macros.hpp"
+
+#ifndef NBLIB_BASE_PIN
+#define NBLIB_BASE_PIN
+
+#define MODE(A) CAT(CHIP_PIN_MODE_, A, _ID)
+
+namespace nblib::hw {
+
+/// ## class {{Pin}}
+struct Pin {
+    Pin() = delete;
+    Pin& operator=(const Pin&) = delete;
+    Pin(const Pin&) = delete;
+
+    /// #### enum {{Pin::Mode}}
+    /// * input
+    /// * inputPullup
+    /// * output
+    /// * inputAnalog
+    /// * inputFloating
+    /// * inputPullUpDown
+    /// * outputGeneralPushPull10MHz
+    /// * outputGeneralOpenDrain10MHz
+    /// * outputAlternatePushPull10MHz
+    /// * outputAlternateOpenDrain10MHz
+    /// * outputGeneralPushPull2MHz
+    /// * outputGeneralOpenDrain2MHz
+    /// * outputAlternatePushPull2MHz
+    /// * outputAlternateOpenDrain2MHz
+    /// * outputGeneralPushPull50MHz
+    /// * outputGeneralOpenDrain50MHz
+    /// * outputAlternatePushPull50MHz
+    /// * outputAlternateOpenDrain50MHz
+    enum class Mode {
+        #if DEFINED(MODE(INPUT))
+            input = MODE(INPUT),
+        #endif
+
+        #if DEFINED(MODE(INPUT_PULLUP))
+            inputPullup = MODE(INPUT_PULLUP),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT))
+            output = MODE(OUTPUT),
+        #endif
+
+        #if DEFINED(MODE(INPUT_ANALOG))
+            inputAnalog = MODE(INPUT_ANALOG),
+        #endif
+
+        #if DEFINED(MODE(INPUT_FLOATING))
+            inputFloating = MODE(INPUT_FLOATING),
+        #endif
+
+        #if DEFINED(MODE(INPUT_PULLUPDOWN))
+            inputPullUpDown = MODE(INPUT_PULLUPDOWN),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_GENERAL_PUSH_PULL_10MHZ))
+            outputGeneralPushPull10MHz = MODE(OUTPUT_GENERAL_PUSH_PULL_10MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_GENERAL_OPEN_DRAIN_10MHZ))
+            outputGeneralOpenDrain10MHz = MODE(OUTPUT_GENERAL_OPEN_DRAIN_10MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_ALTERNATE_PUSH_PULL_10MHZ))
+            outputAlternatePushPull10MHz = MODE(OUTPUT_ALTERNATE_PUSH_PULL_10MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_10MHZ))
+            outputAlternateOpenDrain10MHz = MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_10MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_GENERAL_PUSH_PULL_2MHZ))
+            outputGeneralPushPull2MHz = MODE(OUTPUT_GENERAL_PUSH_PULL_2MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_GENERAL_OPEN_DRAIN_2MHZ))
+            outputGeneralOpenDrain2MHz = MODE(OUTPUT_GENERAL_OPEN_DRAIN_2MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_ALTERNATE_PUSH_PULL_2MHZ))
+            outputAlternatePushPull2MHz = MODE(OUTPUT_ALTERNATE_PUSH_PULL_2MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_2MHZ))
+            outputAlternateOpenDrain2MHz = MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_2MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_GENERAL_PUSH_PULL_50MHZ))
+            outputGeneralPushPull50MHz = MODE(OUTPUT_GENERAL_PUSH_PULL_50MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_GENERAL_OPEN_DRAIN_50MHZ))
+            outputGeneralOpenDrain50MHz = MODE(OUTPUT_GENERAL_OPEN_DRAIN_50MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_ALTERNATE_PUSH_PULL_50MHZ))
+            outputAlternatePushPull50MHz = MODE(OUTPUT_ALTERNATE_PUSH_PULL_50MHZ),
+        #endif
+
+        #if DEFINED(MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_50MHZ))
+            outputAlternateOpenDrain50MHz = MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_50MHZ),
+        #endif
+    };
+
+    /// #### enum {{Pin::Value}}
+    /// * low
+    /// * high
+    enum class Value {
+        low = 0,
+        high = 1,
+    };
+};
+
+} // nblib::hw
+
+#undef MODE
+
+#endif // NBLIB_BASE_PIN
+
+#ifdef PortX
+
+#include "loopj"
+
+#define N _J
+#define PinN CAT(Pin, N)
+#define PIN_N(A) CAT(CHIP_PIN_, X, N, _, A)
+
+#ifdef _J
+    #if CAT(CHIP_PIN_, X, N)
+
+//------------------------------------------------------------------
+
+#ifndef PIN_TESTS
+
+/// ## Class {{PinN}} : Pin
+struct PinN : Pin {
+    PinN() = delete;
+    PinN& operator=(const PinN&) = delete;
+    PinN(const PinN&) = delete;
+
+    /// #### static [[HardwareType]] getHardwareType()
+    static constexpr HardwareType getHardwareType() {
+        return HardwareType::pin;
+    }
+
+    /// #### static void mode([[Pin::Mode]] m)
+    static force_inline void mode(Mode m) {
+        setBit_(REG(PIN_N(MODE_BIT_0_REG)), PIN_N(MODE_BIT_0_BIT), int(m) & 0x01);
+
+        #if DEFINED(PIN_N(MODE_BIT_1_BIT))
+            setBit_(REG(PIN_N(MODE_BIT_1_REG)), PIN_N(MODE_BIT_1_BIT), int(m) & 0x02);
+        #endif
+
+        #if DEFINED(PIN_N(MODE_BIT_2_BIT))
+            setBit_(REG(PIN_N(MODE_BIT_2_REG)), PIN_N(MODE_BIT_2_BIT), int(m) & 0x04);
+        #endif
+
+        #if DEFINED(PIN_N(MODE_BIT_3_BIT))
+            setBit_(REG(PIN_N(MODE_BIT_3_REG)), PIN_N(MODE_BIT_3_BIT), int(m) & 0x08);
+        #endif
+    }
+
+    /// #### static [[Pin::Mode]] mode()
+    static force_inline Mode mode() {
+        int m = 0;
+
+        #if DEFINED(PIN_N(MODE_BIT_0_BIT))
+            m |= int(getBit(REG(PIN_N(MODE_BIT_0_REG)), PIN_N(MODE_BIT_0_BIT))) << 0;
+        #endif
+
+        #if DEFINED(PIN_N(MODE_BIT_1_BIT))
+            m |= int(getBit(REG(PIN_N(MODE_BIT_1_REG)), PIN_N(MODE_BIT_1_BIT))) << 1;
+        #endif
+
+        #if DEFINED(PIN_N(MODE_BIT_2_BIT))
+            m |= int(getBit(REG(PIN_N(MODE_BIT_2_REG)), PIN_N(MODE_BIT_2_BIT))) << 2;
+        #endif
+
+        #if DEFINED(PIN_N(MODE_BIT_3_BIT))
+            m |= int(getBit(REG(PIN_N(MODE_BIT_3_REG)), PIN_N(MODE_BIT_3_BIT))) << 3;
+        #endif
+
+        return Mode(m);
+    }
+
+    /// #### static void output([[Pin::Value]] v)
+    static force_inline void output(Value v) {
+        setBit_(REG(PIN_N(OUTPUT_BIT_0_REG)), PIN_N(OUTPUT_BIT_0_BIT), v == Value::high);
+    }
+
+    /// #### static [[Pin::Value]] output()
+    static force_inline Value output() {
+        return getBit(REG(PIN_N(OUTPUT_BIT_0_REG)), PIN_N(OUTPUT_BIT_0_BIT)) ? Value::high : Value::low;
+    }
+
+    /// #### static [[Pin::Value]] input()
+    static force_inline Value input() {
+        return getBit(REG(PIN_N(INPUT_BIT_0_REG)), PIN_N(INPUT_BIT_0_BIT)) ? Value::high : Value::low;
+    }
+
+    #if DEFINED(PIN_N(TOGGLE_BIT_0_BIT))
+        /// #### static void toggle()
+        static force_inline void toggle() {
+            setBit_(REG(PIN_N(TOGGLE_BIT_0_REG)), PIN_N(TOGGLE_BIT_0_BIT), true);
+        }
+    #endif
+};
+
+#else // PIN_TESTS
+
+TEST(CAT(PortX, _, PinN), getHardwareType) {
+    ASSERT_EQ(PortX::PinN::getHardwareType(), HardwareType::pin);
+}
+
+TEST(CAT(PortX, _, PinN), mode) {
+    #define MODE(A) CAT(CHIP_PIN_MODE_, A, _ID)
+
+    #if DEFINED(MODE(INPUT))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::input));
+    #endif
+
+    #if DEFINED(MODE(INPUT_PULLUP))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::inputPullup));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::output));
+    #endif
+
+    #if DEFINED(MODE(INPUT_ANALOG))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::inputAnalog));
+    #endif
+
+    #if DEFINED(MODE(INPUT_FLOATING))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::inputFloating));
+    #endif
+
+    #if DEFINED(MODE(INPUT_PULLUPDOWN))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::inputPullUpDown));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_GENERAL_PUSH_PULL_10MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputGeneralPushPull10MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_GENERAL_OPEN_DRAIN_10MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputGeneralOpenDrain10MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_ALTERNATE_PUSH_PULL_10MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputAlternatePushPull10MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_10MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputAlternateOpenDrain10MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_GENERAL_PUSH_PULL_2MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputGeneralPushPull2MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_GENERAL_OPEN_DRAIN_2MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputGeneralOpenDrain2MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_ALTERNATE_PUSH_PULL_2MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputAlternatePushPull2MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_2MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputAlternateOpenDrain2MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_GENERAL_PUSH_PULL_50MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputGeneralPushPull50MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_GENERAL_OPEN_DRAIN_50MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputGeneralOpenDrain50MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_ALTERNATE_PUSH_PULL_50MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputAlternatePushPull50MHz));
+    #endif
+
+    #if DEFINED(MODE(OUTPUT_ALTERNATE_OPEN_DRAIN_50MHZ))
+        TEST_REG_WRITE(PortX::PinN::mode(Pin::Mode::outputAlternateOpenDrain50MHz));
+    #endif
+
+    #undef MODE
+
+    TEST_REG_READ_WRITE(PortX::PinN::mode());
+}
+
+TEST(CAT(PortX, _, PinN), output) {
+    TEST_REG_WRITE(PortX::PinN::output(Pin::Value::low));
+    TEST_REG_WRITE(PortX::PinN::output(Pin::Value::high));
+    TEST_REG_READ_WRITE(PortX::PinN::output());
+}
+
+TEST(CAT(PortX, _, PinN), input) {
+    TEST_REG_READ_WRITE(PortX::PinN::input());
+}
+
+#if DEFINED(PIN_N(TOGGLE_BIT_0_BIT))
+    TEST(CAT(PortX, _, PinN), toggle) {
+        TEST_REG_WRITE(PortX::PinN::toggle());
+    }
+#endif
+
+#endif // PIN_TESTS
+
+//------------------------------------------------------------------
+
+    #endif
+
+    #include "pin.xpp"
+#endif // _J
+
+#undef N
+#undef PinN
+#undef PIN_N
+
+#endif // PortX

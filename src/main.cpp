@@ -2,15 +2,16 @@
 
 constexpr uint64_t cpuFreq = 16000000;
 
-using SpindleTimer = nblib::hw::Timer0;
-using SpindlePwm = SpindleTimer::OutputA;
+// using SpindleTimer = nblib::hw::Timer0;
+// using SpindlePwm = SpindleTimer::OutputA;
 using XYTimer = nblib::hw::Timer1;
 using ZTimer = nblib::hw::Timer3;
+using ETimer = nblib::hw::Timer4;
 using XPwm = XYTimer::OutputA;
 using YPwm = XYTimer::OutputB;
 using ZPwm = ZTimer::OutputB;
 using Usart = nblib::hw::Usart0;
-using SpindleOnOffPin = nblib::hw::PortB::Pin0;
+// using SpindleOnOffPin = nblib::hw::PortB::Pin0;
 using XStepPin = XPwm::Pin; // B1
 using XDirectionPin = nblib::hw::PortB::Pin3;
 using YStepPin = YPwm::Pin; // B2
@@ -18,42 +19,49 @@ using YDirectionPin = nblib::hw::PortB::Pin4;
 using ZStepPin = ZPwm::Pin; // D2
 using ZDirectionPin = nblib::hw::PortD::Pin3;
 using EStopPin = nblib::hw::PortD::Pin7;
-using XLimitPin = nblib::hw::PortC::Pin0;
-using YLimitPin = nblib::hw::PortC::Pin1;
-using ZLimitPin = nblib::hw::PortC::Pin2;
-using ProbePin = nblib::hw::PortC::Pin3;
-using SpindlePWMPin = SpindlePwm::Pin; // D6
+// using XLimitPin = nblib::hw::PortC::Pin0;
+// using YLimitPin = nblib::hw::PortC::Pin1;
+// using ZLimitPin = nblib::hw::PortC::Pin2;
+// using ProbePin = nblib::hw::PortC::Pin3;
+// using SpindlePWMPin = SpindlePwm::Pin; // D6
 using LedPin = nblib::hw::PortB::Pin5;
 
 using Pin = nblib::hw::Pin;
 
-struct Action {
-    int16_t _xCount;
-    int16_t _yCount;
-    int16_t _zCount;
+constexpr int32_t minXYZDelay = 1000;
 
-    uint16_t _xSpeed;
-    uint16_t _ySpeed;
-    uint16_t _zSpeed;
+enum class Direction : int8_t {
+    forward = int8_t(Pin::Value::low),
+    reverse = int8_t(Pin::Value::high),
+};
+
+struct Action {
+    struct Axis {
+        Direction direction;
+        int32_t count;
+        int32_t delay;
+
+        Axis() : direction(Direction::forward), count(0), delay(0){
+        }
+
+        Axis(Direction direction, int32_t count, int32_t delay) : direction(direction), count(count), delay(delay) {
+        }
+    };
+
+    Axis x;
+    Axis y;
+    Axis z;
 
     Action() {
-        _xCount = 0;
-        _yCount = 0;
-        _zCount = 0;
-
-        _xSpeed = 0;
-        _ySpeed = 0;
-        _zSpeed = 0;
     }
 
-    Action(int16_t x, int16_t y, int16_t z, uint16_t sx, uint16_t sy, uint16_t sz) {
-        _xCount = x;
-        _yCount = y;
-        _zCount = z;
+    Action(Axis x, Axis y, Axis z) : x(x), y(y), z(z) {
+    }
 
-        _xSpeed = sx;
-        _ySpeed = sy;
-        _zSpeed = sz;
+    bool valid() const {
+        return !((x.count && (x.delay < minXYZDelay))
+            || (y.count && (y.delay < minXYZDelay))
+            || (z.count && (z.delay < minXYZDelay)));
     }
 };
 
@@ -66,18 +74,17 @@ void serialId();
 void serialAction();
 void respond(uint8_t id);
 void handleEStop();
-void home();
 void xCallback(void*);
 void yCallback(void*);
 void zCallback(void*);
-void startNextAction();
-void xyzTimerMiddle(void*);
 void xyzTimerOverflow(void*);
+void xyzTimerMiddle(void*);
 void usartRxComplete(nblib::Queue<uint8_t>* in);
 void usartDataRegisterEmpty(nblib::Queue<uint8_t>* out);
 void flush();
-void pauseXyzTimers();
-void resumeXyzTimers();
+void pauseTimers();
+void resumeTimers();
+int32_t calculatePreviousDelay(int32_t def);
 
 static nblib::Queue<uint8_t, 64> _sout;
 
@@ -85,17 +92,96 @@ static nblib::Queue<uint8_t, 64> _sin;
 
 static nblib::Queue<Action, 16> _actionQueue;
 
-Action _currentAction;
+Action _action;
+int32_t _previousDelay = 0;
 
 void (*handleSerial)();
+
+int16_t cycle;
+bool new_cycle;
+int32_t xNext, yNext, zNext;
 
 void main() {
     init();
 
+    for(int i = 0; i < 1000; i++) {
+        nblib::delay<cpuFreq, 1000000>();
+    }
+
     nblib::interruptsEnable(true);
+
+    // auto d = Direction::reverse;
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 1500), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 1400), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 1300), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 1200), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 1100), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 1000), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 900), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 800), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 100 , 700), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(d, 30000 , 600), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(Direction::reverse, 10000 , 600), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(), Action::Axis(Direction::forward, 100, 100000), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(), Action::Axis(), Action::Axis(Direction::forward, 100, 100000)));
+    // _actionQueue.push(Action(Action::Axis(Direction::reverse, 1000, 15000), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(), Action::Axis(Direction::forward, 1000, 15000), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(), Action::Axis(), Action::Axis(Direction::forward, 1000, 15000)));
+    // _actionQueue.push(Action(Action::Axis(Direction::reverse, 1000, 15000), Action::Axis(), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(), Action::Axis(Direction::reverse, 1000, 15000), Action::Axis()));
+    // _actionQueue.push(Action(Action::Axis(), Action::Axis(), Action::Axis(Direction::reverse, 1000, 15000)));
 
     while(true) {
         handleSerial();
+
+        if(atomic(!_action.x.count && !_action.y.count && !_action.z.count) && !_actionQueue.empty()) {
+            _previousDelay = calculatePreviousDelay(_previousDelay);
+
+            _action = *_actionQueue.pop();
+
+            pauseTimers();
+
+            XYTimer::counter(0);
+            ZTimer::counter(0);
+            ETimer::counter(0);
+
+            cycle = 0;
+            new_cycle = true;
+            xNext = yNext = zNext = 0;
+
+            if(_action.x.count > 0) {
+                XDirectionPin::output(Pin::Value(_action.x.direction));
+                const int32_t first = _action.x.delay / 2 + _previousDelay / 2;
+                if(first >= 65536 - 1) {
+                    xNext = first;
+                } else {
+                    XPwm::value(uint16_t(first));
+                }
+            }
+
+            if(_action.y.count > 0) {
+                YDirectionPin::output(Pin::Value(_action.y.direction));
+                const int32_t first = _action.y.delay / 2 + _previousDelay / 2;
+                if(first >= 65536 - 1) {
+                    yNext = first;
+                } else {
+                    YPwm::value(uint16_t(first));
+                }
+            }
+
+            if(_action.z.count > 0) {
+                ZDirectionPin::output(Pin::Value(_action.z.direction));
+                const int32_t first = _action.z.delay / 2 + _previousDelay / 2;
+                if(first >= 65536 - 1) {
+                    zNext = first;
+                } else {
+                    ZPwm::value(uint16_t(first));
+                }
+            }
+
+            resumeTimers();
+        }
+
         handleEStop();
     }
 }
@@ -112,21 +198,50 @@ void init() {
     Usart::rxCompleteIntEnable(true);
     Usart::setRxCallback(usartRxComplete, _sin.ptr());
 
-    XYTimer::waveform(XYTimer::Waveform::normal);
-    ZTimer::waveform(ZTimer::Waveform::normal);
-    ZTimer::setCallback(xyzTimerOverflow);
-    ZTimer::intEnable(true);
-    ZTimer::OutputA::value(32768);
-    ZTimer::OutputA::setCallback(xyzTimerMiddle);
-    ZTimer::OutputA::intEnable(true);
-    pauseXyzTimers();
-    XYTimer::clock(XYTimer::Clock::div8);
-    ZTimer::clock(ZTimer::Clock::div8);
+    XYTimer::waveform(XYTimer::Waveform::ctcIcr);
+    XYTimer::Input::value(65536 - 2);
+
+    ZTimer::waveform(ZTimer::Waveform::ctcIcr);
+    ZTimer::Input::value(65536 - 2);
+
+    ETimer::waveform(ETimer::Waveform::ctcIcr);
+    ETimer::Input::value(65536 - 2);
+
+    XPwm::value(65536 - 1);
+    YPwm::value(65536 - 1);
+    ZPwm::value(65536 - 1);
+
+    XPwm::mode(XPwm::Mode::toggle);
+    YPwm::mode(YPwm::Mode::toggle);
+    ZPwm::mode(ZPwm::Mode::toggle);
+
+    XPwm::setCallback(xCallback);
+    YPwm::setCallback(yCallback);
+    ZPwm::setCallback(zCallback);
+
+    XPwm::intEnable(true);
+    XPwm::intFlagClear();
+    YPwm::intEnable(true);
+    YPwm::intFlagClear();
+    ZPwm::intEnable(true);
+    ZPwm::intFlagClear();
+
+    ETimer::OutputB::value(65536 - 2);
+    ETimer::OutputB::setCallback(xyzTimerOverflow);
+    ETimer::OutputB::intEnable(true);
+    ETimer::OutputA::value(32768);
+    ETimer::OutputA::setCallback(xyzTimerMiddle);
+    ETimer::OutputA::intEnable(true);
+    pauseTimers();
+    XYTimer::clock(XYTimer::Clock::div1);
+    ZTimer::clock(ZTimer::Clock::div1);
+    ETimer::clock(ETimer::Clock::div1);
     XYTimer::counter(0);
     ZTimer::counter(0);
-    resumeXyzTimers();
+    ETimer::counter(0);
+    resumeTimers();
 
-    SpindleOnOffPin::mode(Pin::Mode::output);
+    // SpindleOnOffPin::mode(Pin::Mode::output);
     XDirectionPin::mode(Pin::Mode::output);
     XStepPin::mode(Pin::Mode::output);
     YStepPin::mode(Pin::Mode::output);
@@ -134,26 +249,16 @@ void init() {
     YDirectionPin::mode(Pin::Mode::output);
     ZDirectionPin::mode(Pin::Mode::output);
     EStopPin::mode(Pin::Mode::input);
-    XLimitPin::mode(Pin::Mode::input);
-    YLimitPin::mode(Pin::Mode::input);
-    ZLimitPin::mode(Pin::Mode::input);
-    ProbePin::mode(Pin::Mode::input);
-    SpindlePWMPin::mode(Pin::Mode::output);
+    // XLimitPin::mode(Pin::Mode::input);
+    // YLimitPin::mode(Pin::Mode::input);
+    // ZLimitPin::mode(Pin::Mode::input);
+    // ProbePin::mode(Pin::Mode::input);
+    // SpindlePWMPin::mode(Pin::Mode::output);
     LedPin::mode(Pin::Mode::output);
 
-    // Looks like a bug in 328pb requires this before Z pwm works...?
+    // A bug in 328pb requires this before Z pwm works.
     // https://www.avrfreaks.net/forum/atmega328pb-timer-34-output-compare-pwm-issue
     ZStepPin::output(Pin::Value::high);
-
-    XPwm::setCallback(xCallback);
-    YPwm::setCallback(yCallback);
-    ZPwm::setCallback(zCallback);
-    XPwm::intEnable(true);
-    YPwm::intEnable(true);
-    ZPwm::intEnable(true);
-    XPwm::mode(XPwm::Mode::toggle);
-    YPwm::mode(YPwm::Mode::toggle);
-    ZPwm::mode(ZPwm::Mode::toggle);
 }
 
 void serialHeader1() {
@@ -184,36 +289,57 @@ void serialId() {
     if(d) {
         switch(*d) {
         case 0:
-            respond(0);
+            respond(0); // TODO Return firmware version number.
             handleSerial = serialHeader1;
             break;
         case 1:
-            // TODO Check if busy first.
-            home();
-            respond(1);
-            handleSerial = serialHeader1;
+            {
+                const uint16_t n = _actionQueue.free();
+                _sout.push(69);
+                _sout.push(69);
+                _sout.push(1);
+                _sout.push(uint8_t(n));
+                _sout.push(uint8_t(n >> 8));
+                flush();
+                handleSerial = serialHeader1;
+            }
             break;
         case 2:
             handleSerial = serialAction;
             break;
+        // TODO case 3 to send char strings.
         }
     }
 }
 
+// [x, y, z, dx, dy, dz]
 void serialAction() {
-    if(_sin.size() >= (6 * 2)) {
-        const int16_t x = (*_sin.pop() << 8) | *_sin.pop();
-        const int16_t y = (*_sin.pop() << 8) | *_sin.pop();
-        const int16_t z = (*_sin.pop() << 8) | *_sin.pop();
-        const uint16_t sx = uint16_t((*_sin.pop() << 8) | *_sin.pop());
-        const uint16_t sy = uint16_t((*_sin.pop() << 8) | *_sin.pop());
-        const uint16_t sz = uint16_t((*_sin.pop() << 8) | *_sin.pop());
+    if(_sin.size() >= (6 * 4)) {
+        uint8_t buffer[6 * 4];
 
-        _actionQueue.push(Action(x, y, z, sx, sy, sz));
+        for(uint8_t& b : buffer) {
+            b = *_sin.pop();
+        }
 
-        startNextAction();
+        const int32_t a = ((int32_t*)buffer)[0];
+        const int32_t b = ((int32_t*)buffer)[1];
+        const int32_t c = ((int32_t*)buffer)[2];
+        const int32_t d = ((int32_t*)buffer)[3];
+        const int32_t e = ((int32_t*)buffer)[4];
+        const int32_t f = ((int32_t*)buffer)[5];
 
-        respond(2);
+        const Action::Axis xAxis((a > 0) ? Direction::reverse : Direction::forward, abs(a), d);
+        const Action::Axis yAxis((b > 0) ? Direction::forward : Direction::reverse, abs(b), e);
+        const Action::Axis zAxis((c > 0) ? Direction::forward : Direction::reverse, abs(c), f);
+
+        const Action action(xAxis, yAxis, zAxis);
+
+        if(action.valid()) {
+            _actionQueue.push(action);
+            respond(2);
+        } else {
+            respond(20);
+        }
 
         handleSerial = serialHeader1;
     }
@@ -229,108 +355,139 @@ void respond(uint8_t id) {
 void handleEStop() {
     block() {
         if(EStopPin::input() == Pin::Value::low) {
-            pauseXyzTimers();
+            pauseTimers();
         } else {
-            resumeXyzTimers();
+            resumeTimers();
         }
     }
 }
 
-// TODO
+// TODO home/calibrate
 void home() {
     // _homing = true;
 }
 
-void xCallback(void*) {
-    --_currentAction._xCount;
+int32_t getnow(uint16_t pwm) {
+    int16_t my_cycle = cycle;
+    if (!new_cycle && pwm < 32768) {
+        my_cycle = cycle + 1;
+    }
+    return int32_t(my_cycle) * (65536 - 1) + pwm;
+}
 
-    // assert(_currentAction._xCount >= 0, "_currentAction._xCount is negative");
-
-    if(_currentAction._xCount) {
-        XPwm::value(XPwm::value() + _currentAction._xSpeed);
+uint16_t wrap_add(uint16_t a, uint16_t b) {
+    int32_t value = int32_t(a) + int32_t(b);
+    if (value >= 65536 - 1) {
+        return uint16_t(value - (65536 - 1));
     } else {
-        startNextAction();
+        return uint16_t(value);
+    }
+}
+
+void xCallback(void*) {
+    _action.x.count--;
+
+    if(_action.x.count) {
+        if (_action.x.delay >= 65536 - 1) {
+            const int32_t now = getnow(XPwm::value());
+            xNext = now + _action.x.delay;
+            XPwm::value(65536 - 1);
+        } else {
+            uint16_t n = wrap_add(XPwm::value(), uint16_t(_action.x.delay));
+            XPwm::value(n);
+        }
+    } else {
+        XPwm::value(65536 - 1); // Disable this callback/pwm.
     }
 }
 
 void yCallback(void*) {
-    --_currentAction._yCount;
+    _action.y.count--;
 
-    if(_currentAction._yCount) {
-        YPwm::value(YPwm::value() + _currentAction._ySpeed);
+    if(_action.y.count) {
+        if (_action.y.delay >= 65536 - 1) {
+            const int32_t now = getnow(YPwm::value());
+            yNext = now + _action.y.delay;
+            YPwm::value(65536 - 1);
+        } else {
+            uint16_t n = wrap_add(YPwm::value(), uint16_t(_action.y.delay));
+            YPwm::value(n);
+        }
     } else {
-        startNextAction();
+        YPwm::value(65536 - 1); // Disable this callback/pwm.
     }
 }
 
 void zCallback(void*) {
-    --_currentAction._zCount;
+    _action.z.count--;
 
-    if(_currentAction._zCount) {
-        ZPwm::value(ZPwm::value() + _currentAction._zSpeed);
-    } else {
-        startNextAction();
-    }
-}
-
-void startNextAction() {
-    if((_currentAction._xCount == 0) && (_currentAction._yCount == 0) && (_currentAction._zCount == 0)) {
-        const Optional<Action> nextAction = _actionQueue.pop();
-
-        if(nextAction) {
-            _currentAction = *nextAction;
-
-            const uint16_t t = XYTimer::counter();
-
-            if(_currentAction._xCount) {
-                XPwm::value(t + _currentAction._xSpeed);
-            }
-
-            if(_currentAction._yCount) {
-                YPwm::value(t + _currentAction._ySpeed);
-            }
-
-            if(_currentAction._zCount) {
-                ZPwm::value(t + _currentAction._zSpeed);
-            }
-
-            XDirectionPin::output((_currentAction._xCount < 0) ? Pin::Value::low : Pin::Value::high);
-            YDirectionPin::output((_currentAction._yCount < 0) ? Pin::Value::high : Pin::Value::low);
-            ZDirectionPin::output((_currentAction._zCount < 0) ? Pin::Value::high : Pin::Value::low);
-
-            _currentAction._xCount = abs(_currentAction._xCount);
-            _currentAction._yCount = abs(_currentAction._yCount);
-            _currentAction._zCount = abs(_currentAction._zCount);
+    if(_action.z.count) {
+        if (_action.z.delay >= 65536 - 1) {
+            const int32_t now = getnow(ZPwm::value());
+            zNext = now + _action.z.delay;
+            ZPwm::value(65536 - 1);
+        } else {
+            uint16_t n = wrap_add(ZPwm::value(), uint16_t(_action.z.delay));
+            ZPwm::value(n);
         }
-    }
-
-}
-
-void xyzTimerMiddle(void*) {
-    if(_currentAction._xCount == 0) {
-        XPwm::value(uint16_t(32768 - 1));
-    }
-
-    if(_currentAction._yCount == 0) {
-        YPwm::value(uint16_t(32768 - 1));
-    }
-
-    if(_currentAction._zCount == 0) {
-        ZPwm::value(uint16_t(32768 - 1));
+    } else {
+        ZPwm::value(65536 - 1); // Disable this callback/pwm.
     }
 }
 
 void xyzTimerOverflow(void*) {
-    if(_currentAction._xCount == 0) {
-        XPwm::value(uint16_t(-1));
+    cycle += 1;
+    new_cycle = true;
+    const int32_t now = int32_t(cycle) * (65536 - 1);
+    if (xNext) {
+        const int32_t remaining = xNext - now;
+        if (remaining < 65536 - 1) {
+            XPwm::value(uint16_t(remaining));
+            xNext = 0;
+        }
     }
-
-    if(_currentAction._yCount == 0) {
-        YPwm::value(uint16_t(-1));
+    if (yNext) {
+        const int32_t remaining = yNext - now;
+        if (remaining < 65536 - 1) {
+            YPwm::value(uint16_t(remaining));
+            yNext = 0;
+        }
     }
+    if (zNext) {
+        const int32_t remaining = zNext - now;
+        if (remaining < 65536 - 1) {
+            ZPwm::value(uint16_t(remaining));
+            zNext = 0;
+        }
+    }
+}
 
-    if(_currentAction._zCount == 0) {
-        ZPwm::value(uint16_t(-1));
+void xyzTimerMiddle(void*) {
+    new_cycle = false;
+    const int32_t now = int32_t(cycle) * (65536 - 1) + 32768;
+    if (xNext) {
+        const int32_t remaining = xNext - now;
+        if (remaining < 65536 - 1) {
+            uint16_t pwm = wrap_add(uint16_t(remaining), 32768);
+            XPwm::value(pwm);
+            xNext = 0;
+        }
+    }
+    if (yNext) {
+        const int32_t remaining = yNext - now;
+        if (remaining < 65536 - 1) {
+            uint16_t pwm = wrap_add(uint16_t(remaining), 32768);
+            YPwm::value(pwm);
+            yNext = 0;
+        }
+    }
+    if (zNext) {
+        const int32_t remaining = zNext - now;
+        if (remaining < 65536 - 1) {
+            uint16_t pwm = wrap_add(uint16_t(remaining), 32768);
+            ZPwm::value(pwm);
+            zNext = 0;
+        }
     }
 }
 
@@ -352,15 +509,38 @@ void flush() {
     Usart::dataRegisterEmptyIntEnable(true);
 }
 
-void pauseXyzTimers() {
+// Also resets the timers' prescaler.
+void pauseTimers() {
     block() {
         XYTimer::synchronizeMode(true);
         XYTimer::prescalerReset();
     }
 }
 
-void resumeXyzTimers() {
+void resumeTimers() {
     block() {
         XYTimer::synchronizeMode(false);
+    }
+}
+
+int32_t calculatePreviousDelay(int32_t def) {
+    int32_t previous = max<int32_t>();
+
+    if(_action.x.delay != 0) {
+        previous = min(previous, _action.x.delay);
+    }
+
+    if(_action.y.delay != 0) {
+        previous = min(previous, _action.y.delay);
+    }
+
+    if(_action.z.delay != 0) {
+        previous = min(previous, _action.z.delay);
+    }
+
+    if(previous != max<int32_t>()) {
+        return previous;
+    } else {
+        return def;
     }
 }
