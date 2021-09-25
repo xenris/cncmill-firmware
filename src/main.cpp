@@ -101,6 +101,12 @@ int16_t cycle;
 bool new_cycle;
 int32_t xNext, yNext, zNext;
 
+template <class Pwm>
+void enablePwm();
+
+template <class Pwm>
+void disablePwm();
+
 void main() {
     init();
 
@@ -109,27 +115,6 @@ void main() {
     }
 
     nblib::interruptsEnable(true);
-
-    // auto d = Direction::reverse;
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 1500), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 1400), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 1300), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 1200), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 1100), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 1000), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 900), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 800), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 100 , 700), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(d, 30000 , 600), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(Direction::reverse, 10000 , 600), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(), Action::Axis(Direction::forward, 100, 100000), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(), Action::Axis(), Action::Axis(Direction::forward, 100, 100000)));
-    // _actionQueue.push(Action(Action::Axis(Direction::reverse, 1000, 15000), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(), Action::Axis(Direction::forward, 1000, 15000), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(), Action::Axis(), Action::Axis(Direction::forward, 1000, 15000)));
-    // _actionQueue.push(Action(Action::Axis(Direction::reverse, 1000, 15000), Action::Axis(), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(), Action::Axis(Direction::reverse, 1000, 15000), Action::Axis()));
-    // _actionQueue.push(Action(Action::Axis(), Action::Axis(), Action::Axis(Direction::reverse, 1000, 15000)));
 
     while(true) {
         handleSerial();
@@ -152,9 +137,10 @@ void main() {
             if(_action.x.count > 0) {
                 XDirectionPin::output(Pin::Value(_action.x.direction));
                 const int32_t first = _action.x.delay / 2 + _previousDelay / 2;
-                if(first >= 65536 - 1) {
+                if(first >= 65536) {
                     xNext = first;
                 } else {
+                    enablePwm<XPwm>();
                     XPwm::value(uint16_t(first));
                 }
             }
@@ -162,9 +148,10 @@ void main() {
             if(_action.y.count > 0) {
                 YDirectionPin::output(Pin::Value(_action.y.direction));
                 const int32_t first = _action.y.delay / 2 + _previousDelay / 2;
-                if(first >= 65536 - 1) {
+                if(first >= 65536) {
                     yNext = first;
                 } else {
+                    enablePwm<YPwm>();
                     YPwm::value(uint16_t(first));
                 }
             }
@@ -172,9 +159,10 @@ void main() {
             if(_action.z.count > 0) {
                 ZDirectionPin::output(Pin::Value(_action.z.direction));
                 const int32_t first = _action.z.delay / 2 + _previousDelay / 2;
-                if(first >= 65536 - 1) {
+                if(first >= 65536) {
                     zNext = first;
                 } else {
+                    enablePwm<ZPwm>();
                     ZPwm::value(uint16_t(first));
                 }
             }
@@ -199,34 +187,19 @@ void init() {
     Usart::setRxCallback(usartRxComplete, _sin.ptr());
 
     XYTimer::waveform(XYTimer::Waveform::ctcIcr);
-    XYTimer::Input::value(65536 - 2);
+    XYTimer::Input::value(65536 - 1);
 
     ZTimer::waveform(ZTimer::Waveform::ctcIcr);
-    ZTimer::Input::value(65536 - 2);
+    ZTimer::Input::value(65536 - 1);
 
     ETimer::waveform(ETimer::Waveform::ctcIcr);
-    ETimer::Input::value(65536 - 2);
-
-    XPwm::value(65536 - 1);
-    YPwm::value(65536 - 1);
-    ZPwm::value(65536 - 1);
-
-    XPwm::mode(XPwm::Mode::toggle);
-    YPwm::mode(YPwm::Mode::toggle);
-    ZPwm::mode(ZPwm::Mode::toggle);
+    ETimer::Input::value(65536 - 1);
 
     XPwm::setCallback(xCallback);
     YPwm::setCallback(yCallback);
     ZPwm::setCallback(zCallback);
 
-    XPwm::intEnable(true);
-    XPwm::intFlagClear();
-    YPwm::intEnable(true);
-    YPwm::intFlagClear();
-    ZPwm::intEnable(true);
-    ZPwm::intFlagClear();
-
-    ETimer::OutputB::value(65536 - 2);
+    ETimer::OutputB::value(65536 - 1);
     ETimer::OutputB::setCallback(xyzTimerOverflow);
     ETimer::OutputB::intEnable(true);
     ETimer::OutputA::value(32768);
@@ -308,6 +281,7 @@ void serialId() {
             handleSerial = serialAction;
             break;
         // TODO case 3 to send char strings.
+        // TODO case 4 to reset estop, i.e. clear action queue and call resumeTimers().
         }
     }
 }
@@ -356,8 +330,6 @@ void handleEStop() {
     block() {
         if(EStopPin::input() == Pin::Value::low) {
             pauseTimers();
-        } else {
-            resumeTimers();
         }
     }
 }
@@ -372,32 +344,22 @@ int32_t getnow(uint16_t pwm) {
     if (!new_cycle && pwm < 32768) {
         my_cycle = cycle + 1;
     }
-    return int32_t(my_cycle) * (65536 - 1) + pwm;
-}
-
-uint16_t wrap_add(uint16_t a, uint16_t b) {
-    int32_t value = int32_t(a) + int32_t(b);
-    if (value >= 65536 - 1) {
-        return uint16_t(value - (65536 - 1));
-    } else {
-        return uint16_t(value);
-    }
+    return int32_t(my_cycle) * 65536 + pwm;
 }
 
 void xCallback(void*) {
     _action.x.count--;
 
     if(_action.x.count) {
-        if (_action.x.delay >= 65536 - 1) {
+        if (_action.x.delay >= 65536) {
             const int32_t now = getnow(XPwm::value());
             xNext = now + _action.x.delay;
-            XPwm::value(65536 - 1);
+            disablePwm<XPwm>();
         } else {
-            uint16_t n = wrap_add(XPwm::value(), uint16_t(_action.x.delay));
-            XPwm::value(n);
+            XPwm::value(XPwm::value() + uint16_t(_action.x.delay));
         }
     } else {
-        XPwm::value(65536 - 1); // Disable this callback/pwm.
+        disablePwm<XPwm>();
     }
 }
 
@@ -405,16 +367,15 @@ void yCallback(void*) {
     _action.y.count--;
 
     if(_action.y.count) {
-        if (_action.y.delay >= 65536 - 1) {
+        if (_action.y.delay >= 65536) {
             const int32_t now = getnow(YPwm::value());
             yNext = now + _action.y.delay;
-            YPwm::value(65536 - 1);
+            disablePwm<YPwm>();
         } else {
-            uint16_t n = wrap_add(YPwm::value(), uint16_t(_action.y.delay));
-            YPwm::value(n);
+            YPwm::value(YPwm::value() + uint16_t(_action.y.delay));
         }
     } else {
-        YPwm::value(65536 - 1); // Disable this callback/pwm.
+        disablePwm<YPwm>();
     }
 }
 
@@ -422,71 +383,73 @@ void zCallback(void*) {
     _action.z.count--;
 
     if(_action.z.count) {
-        if (_action.z.delay >= 65536 - 1) {
+        if (_action.z.delay >= 65536) {
             const int32_t now = getnow(ZPwm::value());
             zNext = now + _action.z.delay;
-            ZPwm::value(65536 - 1);
+            disablePwm<ZPwm>();
         } else {
-            uint16_t n = wrap_add(ZPwm::value(), uint16_t(_action.z.delay));
-            ZPwm::value(n);
+            ZPwm::value(ZPwm::value() + uint16_t(_action.z.delay));
         }
     } else {
-        ZPwm::value(65536 - 1); // Disable this callback/pwm.
+        disablePwm<ZPwm>();
     }
 }
 
 void xyzTimerOverflow(void*) {
     cycle += 1;
     new_cycle = true;
-    const int32_t now = int32_t(cycle) * (65536 - 1);
+    const int32_t now = int32_t(cycle) * 65536;
     if (xNext) {
         const int32_t remaining = xNext - now;
-        if (remaining < 65536 - 1) {
+        if (remaining < 65536) {
             XPwm::value(uint16_t(remaining));
             xNext = 0;
+            enablePwm<XPwm>();
         }
     }
     if (yNext) {
         const int32_t remaining = yNext - now;
-        if (remaining < 65536 - 1) {
+        if (remaining < 65536) {
             YPwm::value(uint16_t(remaining));
             yNext = 0;
+            enablePwm<YPwm>();
         }
     }
     if (zNext) {
         const int32_t remaining = zNext - now;
-        if (remaining < 65536 - 1) {
+        if (remaining < 65536) {
             ZPwm::value(uint16_t(remaining));
             zNext = 0;
+            enablePwm<ZPwm>();
         }
     }
 }
 
 void xyzTimerMiddle(void*) {
     new_cycle = false;
-    const int32_t now = int32_t(cycle) * (65536 - 1) + 32768;
+    const int32_t now = int32_t(cycle) * 65536 + 32768;
     if (xNext) {
         const int32_t remaining = xNext - now;
-        if (remaining < 65536 - 1) {
-            uint16_t pwm = wrap_add(uint16_t(remaining), 32768);
-            XPwm::value(pwm);
+        if (remaining < 65536) {
+            XPwm::value(uint16_t(remaining) + 32768);
             xNext = 0;
+            enablePwm<XPwm>();
         }
     }
     if (yNext) {
         const int32_t remaining = yNext - now;
         if (remaining < 65536 - 1) {
-            uint16_t pwm = wrap_add(uint16_t(remaining), 32768);
-            YPwm::value(pwm);
+            YPwm::value(uint16_t(remaining) + 32768);
             yNext = 0;
+            enablePwm<YPwm>();
         }
     }
     if (zNext) {
         const int32_t remaining = zNext - now;
         if (remaining < 65536 - 1) {
-            uint16_t pwm = wrap_add(uint16_t(remaining), 32768);
-            ZPwm::value(pwm);
+            ZPwm::value(uint16_t(remaining) + 32768);
             zNext = 0;
+            enablePwm<ZPwm>();
         }
     }
 }
@@ -542,5 +505,24 @@ int32_t calculatePreviousDelay(int32_t def) {
         return previous;
     } else {
         return def;
+    }
+}
+
+template <class Pwm>
+void enablePwm() {
+    block() {
+        Pwm::mode(Pwm::Mode::toggle);
+        Pwm::Pin::output(Pin::Value::high);
+        Pwm::intFlagClear();
+        Pwm::intEnable(true);
+    }
+}
+
+template <class Pwm>
+void disablePwm() {
+    block() {
+        Pwm::intEnable(false);
+        Pwm::Pin::output(Pwm::Pin::input());
+        Pwm::mode(Pwm::Mode::disconnected);
     }
 }
