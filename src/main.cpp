@@ -90,7 +90,7 @@ static nblib::Queue<uint8_t, 64> _sout;
 
 static nblib::Queue<uint8_t, 64> _sin;
 
-static nblib::Queue<Action, 16> _actionQueue;
+static nblib::Queue<Action, 32> _actionQueue;
 
 Action _action;
 int32_t _previousDelay = 0;
