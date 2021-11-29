@@ -1,6 +1,11 @@
 #include "main.hpp"
 
 constexpr uint64_t cpuFreq = 16000000;
+constexpr uint8_t headerCode = 69;
+constexpr uint8_t pingCode = 0;
+constexpr uint8_t queryCode = 1;
+constexpr uint8_t actionCode = 2;
+constexpr uint8_t errorCode = 20;
 
 // using SpindleTimer = nblib::hw::Timer0;
 // using SpindlePwm = SpindleTimer::OutputA;
@@ -87,19 +92,16 @@ void resumeTimers();
 int32_t calculatePreviousDelay(int32_t def);
 
 static nblib::Queue<uint8_t, 64> _sout;
-
 static nblib::Queue<uint8_t, 64> _sin;
-
 static nblib::Queue<Action, 32> _actionQueue;
-
-Action _action;
-int32_t _previousDelay = 0;
-
-void (*handleSerial)();
-
-int16_t cycle;
-bool new_cycle;
-int32_t xNext, yNext, zNext;
+static Action _action;
+static int32_t _previousDelay = 0;
+static void (*handleSerial)();
+static int16_t _cycle;
+static bool _new_cycle;
+static int32_t _xNext;
+static int32_t _yNext;
+static int32_t _zNext;
 
 template <class Pwm>
 void enablePwm();
@@ -130,15 +132,15 @@ void main() {
             ZTimer::counter(0);
             ETimer::counter(0);
 
-            cycle = 0;
-            new_cycle = true;
-            xNext = yNext = zNext = 0;
+            _cycle = 0;
+            _new_cycle = true;
+            _xNext = _yNext = _zNext = 0;
 
             if(_action.x.count > 0) {
                 XDirectionPin::output(Pin::Value(_action.x.direction));
                 const int32_t first = _action.x.delay / 2 + _previousDelay / 2;
                 if(first >= 65536) {
-                    xNext = first;
+                    _xNext = first;
                 } else {
                     enablePwm<XPwm>();
                     XPwm::value(uint16_t(first));
@@ -149,7 +151,7 @@ void main() {
                 YDirectionPin::output(Pin::Value(_action.y.direction));
                 const int32_t first = _action.y.delay / 2 + _previousDelay / 2;
                 if(first >= 65536) {
-                    yNext = first;
+                    _yNext = first;
                 } else {
                     enablePwm<YPwm>();
                     YPwm::value(uint16_t(first));
@@ -160,7 +162,7 @@ void main() {
                 ZDirectionPin::output(Pin::Value(_action.z.direction));
                 const int32_t first = _action.z.delay / 2 + _previousDelay / 2;
                 if(first >= 65536) {
-                    zNext = first;
+                    _zNext = first;
                 } else {
                     enablePwm<ZPwm>();
                     ZPwm::value(uint16_t(first));
@@ -238,7 +240,7 @@ void serialHeader1() {
     const Optional<uint8_t> d = _sin.pop();
 
     if(d) {
-        if(*d == 69) {
+        if(*d == headerCode) {
             handleSerial = serialHeader2;
         }
     }
@@ -248,7 +250,7 @@ void serialHeader2() {
     const Optional<uint8_t> d = _sin.pop();
 
     if(d) {
-        if(*d == 69) {
+        if(*d == headerCode) {
             handleSerial = serialId;
         } else {
             handleSerial = serialHeader1;
@@ -261,23 +263,23 @@ void serialId() {
 
     if(d) {
         switch(*d) {
-        case 0:
-            respond(0); // TODO Return firmware version number.
+        case pingCode:
+            respond(pingCode); // TODO Return firmware version number.
             handleSerial = serialHeader1;
             break;
-        case 1:
+        case queryCode:
             {
                 const uint16_t n = _actionQueue.free();
-                _sout.push(69);
-                _sout.push(69);
-                _sout.push(1);
+                _sout.push(headerCode);
+                _sout.push(headerCode);
+                _sout.push(queryCode);
                 _sout.push(uint8_t(n));
                 _sout.push(uint8_t(n >> 8));
                 flush();
                 handleSerial = serialHeader1;
             }
             break;
-        case 2:
+        case actionCode:
             handleSerial = serialAction;
             break;
         // TODO case 3 to send char strings.
@@ -310,9 +312,9 @@ void serialAction() {
 
         if(action.valid()) {
             _actionQueue.push(action);
-            respond(2);
+            respond(actionCode);
         } else {
-            respond(20);
+            respond(errorCode);
         }
 
         handleSerial = serialHeader1;
@@ -320,8 +322,8 @@ void serialAction() {
 }
 
 void respond(uint8_t id) {
-    _sout.push(69);
-    _sout.push(69);
+    _sout.push(headerCode);
+    _sout.push(headerCode);
     _sout.push(id);
     flush();
 }
@@ -340,10 +342,12 @@ void home() {
 }
 
 int32_t getnow(uint16_t pwm) {
-    int16_t my_cycle = cycle;
-    if (!new_cycle && pwm < 32768) {
-        my_cycle = cycle + 1;
+    int16_t my_cycle = _cycle;
+
+    if(!_new_cycle && pwm < 32768) {
+        my_cycle = _cycle + 1;
     }
+
     return int32_t(my_cycle) * 65536 + pwm;
 }
 
@@ -351,9 +355,11 @@ void xCallback(void*) {
     _action.x.count--;
 
     if(_action.x.count) {
-        if (_action.x.delay >= 65536) {
+        if(_action.x.delay >= 65536) {
             const int32_t now = getnow(XPwm::value());
-            xNext = now + _action.x.delay;
+
+            _xNext = now + _action.x.delay;
+
             disablePwm<XPwm>();
         } else {
             XPwm::value(XPwm::value() + uint16_t(_action.x.delay));
@@ -367,9 +373,11 @@ void yCallback(void*) {
     _action.y.count--;
 
     if(_action.y.count) {
-        if (_action.y.delay >= 65536) {
+        if(_action.y.delay >= 65536) {
             const int32_t now = getnow(YPwm::value());
-            yNext = now + _action.y.delay;
+
+            _yNext = now + _action.y.delay;
+
             disablePwm<YPwm>();
         } else {
             YPwm::value(YPwm::value() + uint16_t(_action.y.delay));
@@ -383,9 +391,11 @@ void zCallback(void*) {
     _action.z.count--;
 
     if(_action.z.count) {
-        if (_action.z.delay >= 65536) {
+        if(_action.z.delay >= 65536) {
             const int32_t now = getnow(ZPwm::value());
-            zNext = now + _action.z.delay;
+
+            _zNext = now + _action.z.delay;
+
             disablePwm<ZPwm>();
         } else {
             ZPwm::value(ZPwm::value() + uint16_t(_action.z.delay));
@@ -396,59 +406,73 @@ void zCallback(void*) {
 }
 
 void xyzTimerOverflow(void*) {
-    cycle += 1;
-    new_cycle = true;
-    const int32_t now = int32_t(cycle) * 65536;
-    if (xNext) {
-        const int32_t remaining = xNext - now;
-        if (remaining < 65536) {
+    _cycle += 1;
+    _new_cycle = true;
+
+    const int32_t now = int32_t(_cycle) * 65536;
+
+    if(_xNext) {
+        const int32_t remaining = _xNext - now;
+
+        if(remaining < 65536) {
             XPwm::value(uint16_t(remaining));
-            xNext = 0;
+            _xNext = 0;
             enablePwm<XPwm>();
         }
     }
-    if (yNext) {
-        const int32_t remaining = yNext - now;
-        if (remaining < 65536) {
+
+    if(_yNext) {
+        const int32_t remaining = _yNext - now;
+
+        if(remaining < 65536) {
             YPwm::value(uint16_t(remaining));
-            yNext = 0;
+            _yNext = 0;
             enablePwm<YPwm>();
         }
     }
-    if (zNext) {
-        const int32_t remaining = zNext - now;
-        if (remaining < 65536) {
+
+    if(_zNext) {
+        const int32_t remaining = _zNext - now;
+
+        if(remaining < 65536) {
             ZPwm::value(uint16_t(remaining));
-            zNext = 0;
+            _zNext = 0;
             enablePwm<ZPwm>();
         }
     }
 }
 
 void xyzTimerMiddle(void*) {
-    new_cycle = false;
-    const int32_t now = int32_t(cycle) * 65536 + 32768;
-    if (xNext) {
-        const int32_t remaining = xNext - now;
-        if (remaining < 65536) {
+    _new_cycle = false;
+
+    const int32_t now = int32_t(_cycle) * 65536 + 32768;
+
+    if(_xNext) {
+        const int32_t remaining = _xNext - now;
+
+        if(remaining < 65536) {
             XPwm::value(uint16_t(remaining) + 32768);
-            xNext = 0;
+            _xNext = 0;
             enablePwm<XPwm>();
         }
     }
-    if (yNext) {
-        const int32_t remaining = yNext - now;
-        if (remaining < 65536 - 1) {
+
+    if(_yNext) {
+        const int32_t remaining = _yNext - now;
+
+        if(remaining < 65536 - 1) {
             YPwm::value(uint16_t(remaining) + 32768);
-            yNext = 0;
+            _yNext = 0;
             enablePwm<YPwm>();
         }
     }
-    if (zNext) {
-        const int32_t remaining = zNext - now;
-        if (remaining < 65536 - 1) {
+
+    if(_zNext) {
+        const int32_t remaining = _zNext - now;
+
+        if(remaining < 65536 - 1) {
             ZPwm::value(uint16_t(remaining) + 32768);
-            zNext = 0;
+            _zNext = 0;
             enablePwm<ZPwm>();
         }
     }
